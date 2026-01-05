@@ -30,57 +30,55 @@ import java.util.stream.Collectors;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
-
     private final UserRepository userRepository;
-
-    private final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+    private Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
 
         String header = request.getHeader("Authorization");
-        logger.info("Authorization header: {}", header);
+        logger.info("Authorization header : {}", header);
 
         if (header != null && header.startsWith("Bearer ")) {
-            //token extraction, validate, authentication creation, and then set to Security Context.
+            //token extract and validate then authentication create and then security context ke ander set karunga.
             String token = header.substring(7);
-
+            //check for access token
 
             try {
-                //check for access token
+
                 if (!jwtService.isAccessToken(token)) {
-                    //message pass
+                    //message pass kar hai---
                     filterChain.doFilter(request, response);
                     return;
                 }
 
                 Jws<Claims> parse = jwtService.parse(token);
+
                 Claims payload = parse.getPayload();
+
                 String userId = payload.getSubject();
-
-
                 UUID userUuid = UserHelper.parseUUID(userId);
 
                 userRepository.findById(userUuid).ifPresent(user -> {
-                    //check if user is enabled or not
+
+                    //check for user enable or not
                     if (user.isEnable()) {
-                        // if user found from db
+                        // user mil chuka hai database se
                         List<GrantedAuthority> authorities = user.getRoles() == null ? List.of() : user.getRoles().stream().map(role -> new SimpleGrantedAuthority(role.getName())).collect(Collectors.toList());
                         UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(user.getEmail(), null, authorities);
                         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                        //setting authentication to Security Context
-                        if (SecurityContextHolder.getContext().getAuthentication() == null) {
+                        //final line : to set the authentication to security context
+                        if (SecurityContextHolder.getContext().getAuthentication() == null)
                             SecurityContextHolder.getContext().setAuthentication(authentication);
-                        }
                     }
                 });
-
-            } catch (ExpiredJwtException expiredJwtException) {
-                request.setAttribute("error", "Invalid Token");
-//                expiredJwtException.printStackTrace();
+            } catch (ExpiredJwtException e) {
+                request.setAttribute("error", "Token Expired");
+                // e.printStackTrace();
 
             } catch (Exception e) {
                 request.setAttribute("error", "Invalid Token");
+                //e.printStackTrace();
             }
         }
         filterChain.doFilter(request, response);

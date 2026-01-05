@@ -23,13 +23,13 @@ import java.util.UUID;
 @Data
 public class JwtService {
     private final SecretKey key;
-    private final Long accessTtlSeconds;
-    private final Long refreshTtlSeconds;
+    private final long accessTtlSeconds;
+    private final long refreshTtlSeconds;
     private final String issuer;
 
     public JwtService(@Value("${security.jwt.secret}") String secret,
-                      @Value("${security.jwt.access-ttl-seconds}") Long accessTtlSeconds,
-                      @Value("${security.jwt.refresh-ttl-seconds}") Long refreshTtlSeconds,
+                      @Value("${security.jwt.access-ttl-seconds}") long accessTtlSeconds,
+                      @Value("${security.jwt.refresh-ttl-seconds}") long refreshTtlSeconds,
                       @Value("${security.jwt.issuer}") String issuer) {
         if (secret == null || secret.length() < 64) {
             throw new IllegalArgumentException("Invalid secret");
@@ -109,7 +109,7 @@ public class JwtService {
     }
 
     //get jwt id from token
-    public String Jti(String token) {
+    public String getJti(String token) {
         return parse(token).getPayload().getId();
     }
 

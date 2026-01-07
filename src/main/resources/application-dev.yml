@@ -64,3 +64,8 @@ app:
     frontend:
       success-redirect: http://localhost:5173/auth/success
       failure-redirect: http://localhost:5173/auth/failure
+springdoc:
+  swagger-ui:
+    operations-sorter: alpha
+    tags-sorter: alpha
+    doc-expansion: false

@@ -1,7 +1,6 @@
 package com.auth.auth_app_backend.entities;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -27,9 +26,7 @@ public class User implements UserDetails {
     @Column(name = "user_email", unique = true, length = 300)
     private String email;
     @Column(name = "user_name", length = 500)
-    @NotBlank(message = "Name can't be blank")
     private String name;
-    @NotBlank(message = "Password can't be blank")
     private String password;
     private String image;
     private boolean enable = true;
@@ -38,6 +35,7 @@ public class User implements UserDetails {
 
     @Enumerated(EnumType.STRING)
     private Provider provider = Provider.LOCAL;
+    private String providerId;
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(name = "user_roles",

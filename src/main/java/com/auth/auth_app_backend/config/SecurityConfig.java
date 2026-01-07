@@ -4,7 +4,6 @@ import com.auth.auth_app_backend.dtos.ApiError;
 import com.auth.auth_app_backend.security.JwtAuthenticationFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -18,14 +17,21 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
-    @Autowired
     private JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    private AuthenticationSuccessHandler successHandler;
+
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, AuthenticationSuccessHandler successHandler) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.successHandler = successHandler;
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -42,6 +48,11 @@ public class SecurityConfig {
                                 .anyRequest()
                                 .authenticated()
                 )
+                .oauth2Login(oauth2 ->
+                        oauth2.successHandler(successHandler)
+                                .failureHandler(null)
+
+                ).logout(AbstractHttpConfigurer::disable)
                 .exceptionHandling(ex ->
                         ex.authenticationEntryPoint((request, response, authenticationException) -> {
                             //error message

@@ -108,7 +108,10 @@ public class AuthController {
         }
 
         String jti = jwtService.getJti(refreshToken);
-        UUID userId = jwtService.getUserId(refreshToken);
+
+        // Changed UUID to Long
+        Long userId = jwtService.getUserId(refreshToken);
+
         RefreshToken storedRefreshToken = refreshTokenRepository.findByJti(jti).orElseThrow(() -> new BadCredentialsException("Refresh token not recognized"));
 
         if (storedRefreshToken.isRevoked()) {
@@ -147,7 +150,8 @@ public class AuthController {
         readRefreshTokenFromRequest(null, request).ifPresent(token -> {
             try {
                 if (jwtService.isRefreshToken(token)) {
-                    UUID userId = jwtService.getUserId(token);
+                    // Changed UUID to Long
+                    Long userId = jwtService.getUserId(token);
 
                     refreshTokenRepository.findByUserId(userId).ifPresent(rt -> {
                         rt.setRevoked(true);
@@ -214,4 +218,3 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.CREATED).body(authService.registerUser(userDto));
     }
 }
-

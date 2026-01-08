@@ -47,6 +47,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorizeHttpRequests ->
                         authorizeHttpRequests
                                 .requestMatchers(AppConstants.AUTH_PUBLIC_URLS).permitAll()
+                                .requestMatchers("api/v1/admin/**").permitAll()
                                 .anyRequest()
                                 .authenticated()
                 )

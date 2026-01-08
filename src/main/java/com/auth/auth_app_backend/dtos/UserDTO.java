@@ -6,7 +6,6 @@ import lombok.*;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.UUID;
 
 @Getter
 @Setter
@@ -14,7 +13,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @Builder
 public class UserDTO {
-    private UUID id;
+    private Long id;
     private String email;
     private String name;
     private String password;
@@ -24,5 +23,4 @@ public class UserDTO {
     private Instant updatedAt = Instant.now();
     private Provider provider = Provider.LOCAL;
     private Set<RoleDTO> roles = new HashSet<>();
-
 }

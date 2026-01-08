@@ -10,7 +10,6 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.UUID;
 
 @Getter
 @Setter
@@ -19,17 +18,25 @@ import java.util.UUID;
 @Builder
 @Entity(name = "users")
 public class User implements UserDetails {
+
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @GeneratedValue(strategy = GenerationType.IDENTITY) // Changed to Auto Increment
     @Column(name = "user_id")
-    private UUID id;
+    private Long id; // Changed type to Long
+
     @Column(name = "user_email", unique = true, length = 300)
     private String email;
+
     @Column(name = "user_name", length = 500)
     private String name;
+
     private String password;
     private String image;
+
+    // Explicitly defining column name is good practice for boolean "is/has" fields
+    @Column(name = "is_enabled")
     private boolean enable = true;
+
     private Instant createdAt = Instant.now();
     private Instant updatedAt = Instant.now();
 
@@ -37,7 +44,7 @@ public class User implements UserDetails {
     private Provider provider = Provider.LOCAL;
     private String providerId;
 
-    @ManyToMany(fetch = FetchType.EAGER)
+    @ManyToMany(fetch = FetchType.EAGER, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinTable(name = "user_roles",
             joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "role_id"))
@@ -70,7 +77,7 @@ public class User implements UserDetails {
 
     @Override
     public boolean isAccountNonExpired() {
-        return UserDetails.super.isAccountNonExpired();
+        return true; // Usually true unless you implement expiration logic
     }
 
     @Override

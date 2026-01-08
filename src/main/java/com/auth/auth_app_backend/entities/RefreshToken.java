@@ -4,13 +4,11 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
-import java.util.UUID;
 
 @Entity
 @Table(name = "refresh_tokens", indexes = {
         @Index(name = "refresh_tokens_jti_idx", columnList = "jti", unique = true),
         @Index(name = "refresh_tokens_user_id_idx", columnList = "user_id", unique = true)
-
 })
 @Getter
 @Setter
@@ -18,9 +16,10 @@ import java.util.UUID;
 @NoArgsConstructor
 @Builder
 public class RefreshToken {
+
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @Column(name = "jti", unique = true, nullable = false, updatable = false)
     private String jti;
@@ -37,6 +36,4 @@ public class RefreshToken {
 
     @Column(nullable = false)
     private boolean revoked;
-
-
 }

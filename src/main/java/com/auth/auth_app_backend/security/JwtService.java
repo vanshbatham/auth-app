@@ -41,15 +41,15 @@ public class JwtService {
     }
 
 
-    //generate token
+    // generate token
     public String generateAccessToken(User user) {
         Instant now = Instant.now();
         List<String> roles = user.getRoles() == null ? List.of() :
                 user.getRoles().stream().map(Role::getName).toList();
 
         return Jwts.builder()
-                .id(UUID.randomUUID().toString())
-                .subject(user.getId().toString())
+                .id(UUID.randomUUID().toString()) // Random ID for the token itself (this is fine as UUID)
+                .subject(user.getId().toString()) // Takes the Long ID (e.g., "1") and makes it a String
                 .issuer(issuer)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusSeconds(accessTtlSeconds)))
@@ -62,12 +62,12 @@ public class JwtService {
                 .compact();
     }
 
-    //generate refresh token
+    // generate refresh token
     public String generateRefreshToken(User user, String jti) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .id(jti)
-                .subject(user.getId().toString())
+                .subject(user.getId().toString()) // Takes the Long ID
                 .issuer(issuer)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusSeconds(refreshTtlSeconds)))
@@ -76,7 +76,7 @@ public class JwtService {
                 .compact();
     }
 
-    //parse token
+    // parse token
     public Jws<Claims> parse(String token) {
         return Jwts.parser()
                 .verifyWith(key)
@@ -84,40 +84,39 @@ public class JwtService {
                 .parseSignedClaims(token);
     }
 
-    //check if it's access token
+    // check if it's access token
     public boolean isAccessToken(String token) {
         Claims claims = parse(token).getPayload();
         return "access".equals(claims.get("typ"));
     }
 
-    //check if it's refresh token
+    // check if it's refresh token
     public boolean isRefreshToken(String token) {
         Claims claims = parse(token).getPayload();
         return "refresh".equals(claims.get("typ"));
     }
 
-    //get user id from token
-    public UUID getUserId(String token) {
+    // get user id from token
+    public Long getUserId(String token) {
         Claims claims = parse(token).getPayload();
-        return UUID.fromString(claims.getSubject());
+        return Long.parseLong(claims.getSubject());
     }
 
-    //get email  from token
+    // get email from token
     public String getEmail(String token) {
         Claims claims = parse(token).getPayload();
         return (String) claims.get("email");
     }
 
-    //get jwt id from token
+    // get jwt id from token
     public String getJti(String token) {
         return parse(token).getPayload().getId();
     }
 
-    //get roles from token
+    // get roles from token
+    @SuppressWarnings("unchecked")
     public List<String> getRoles(String token) {
         Claims claims = parse(token).getPayload();
         return (List<String>) claims.get("roles");
     }
-
-
 }

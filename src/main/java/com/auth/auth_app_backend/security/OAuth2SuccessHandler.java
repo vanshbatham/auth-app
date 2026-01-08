@@ -1,9 +1,8 @@
 package com.auth.auth_app_backend.security;
 
-import com.auth.auth_app_backend.entities.Provider;
-import com.auth.auth_app_backend.entities.RefreshToken;
-import com.auth.auth_app_backend.entities.User;
+import com.auth.auth_app_backend.entities.*;
 import com.auth.auth_app_backend.repositories.RefreshTokenRepository;
+import com.auth.auth_app_backend.repositories.RoleRepository;
 import com.auth.auth_app_backend.repositories.UserRepository;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,9 +16,13 @@ import org.springframework.security.oauth2.client.authentication.OAuth2Authentic
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Component
@@ -28,43 +31,39 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final JwtService jwtService;
     private final CookieService cookieService;
     private final RefreshTokenRepository refreshTokenRepository;
 
-    @Value("${app.auth.frontend.success-redirect}")
+    @Value("${app.auth.frontend.success-redirect:http://localhost:5173/auth/success}")
     private String frontEndSuccessUrl;
 
     @Override
+    @Transactional
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
         logger.info("Successful Authentication");
-        logger.info(authentication.toString());
-
 
         OAuth2User oAuth2User = (OAuth2User) authentication.getPrincipal();
+        String registrationId = ((OAuth2AuthenticationToken) authentication).getAuthorizedClientRegistrationId();
 
-        //identify user:
-        String registrationId = "unknown";
-        if (authentication instanceof OAuth2AuthenticationToken token) {
-            registrationId = token.getAuthorizedClientRegistrationId();
-        }
+        User user = null;
 
-        logger.info("registrationId: " + registrationId);
-        logger.info("user: " + oAuth2User.getAttributes().toString());
+        // 1. Fetch Default Role
+        Role defaultRole = roleRepository.findByName(AppRole.ROLE_USER.name())
+                .orElseGet(() -> {
+                    Role newRole = new Role();
+                    newRole.setName(AppRole.ROLE_USER.name());
+                    return roleRepository.save(newRole);
+                });
 
-        User user;
-
+        // 2. Identify or Create User
         switch (registrationId) {
             case "google" -> {
-                Object googleIdObj = oAuth2User.getAttributes().get("sub");
-                Object emailObj = oAuth2User.getAttributes().get("email");
-                Object nameObj = oAuth2User.getAttributes().get("name");
-                Object pictureObj = oAuth2User.getAttributes().get("picture");
-
-                String googleId = googleIdObj == null ? "" : googleIdObj.toString();
-                String email = emailObj == null ? "" : emailObj.toString();
-                String name = nameObj == null ? "" : nameObj.toString();
-                String picture = pictureObj == null ? "" : pictureObj.toString();
+                String email = oAuth2User.getAttribute("email");
+                String name = oAuth2User.getAttribute("name");
+                String picture = oAuth2User.getAttribute("picture");
+                String googleId = oAuth2User.getAttribute("sub");
 
                 User newUser = User.builder()
                         .email(email)
@@ -73,72 +72,76 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
                         .enable(true)
                         .provider(Provider.GOOGLE)
                         .providerId(googleId)
+                        .roles(Set.of(defaultRole))
                         .build();
 
-                user = userRepository.findByEmail(email)
-                        .orElseGet(() -> userRepository.save(newUser));
+                user = userRepository.findByEmail(email).orElseGet(() -> userRepository.save(newUser));
             }
             case "github" -> {
-                String name = oAuth2User.getAttributes().getOrDefault("name", "").toString();
-                String image = oAuth2User.getAttributes().getOrDefault("avatar_url", "").toString();
-                String githubId = oAuth2User.getAttributes().getOrDefault("id", "").toString();
-                String email = (String) oAuth2User.getAttributes().get("email");
-                if (email == null) {
-                    email = name + "@github.com";
-                }
+                String email = oAuth2User.getAttribute("email");
+                String name = oAuth2User.getAttribute("name");
+                String avatar = oAuth2User.getAttribute("avatar_url");
+                String id = String.valueOf(oAuth2User.getAttributes().get("id"));
+
+                if (email == null) email = name + "@github.com";
 
                 User newUser = User.builder()
                         .email(email)
                         .name(name)
-                        .image(image)
+                        .image(avatar)
                         .enable(true)
                         .provider(Provider.GITHUB)
-                        .providerId(githubId)
+                        .providerId(id)
+                        .roles(Set.of(defaultRole))
                         .build();
 
-                user = userRepository.findByEmail(email)
-                        .orElseGet(() -> userRepository.save(newUser));
+                user = userRepository.findByEmail(email).orElseGet(() -> userRepository.save(newUser));
             }
-
-            default -> {
-                throw new RuntimeException("Invalid registration id");
-            }
+            default -> throw new RuntimeException("Invalid registration id");
         }
 
-        //username
-        //email
-        //new user creation
-        //jwt token --- redirect
+        // 3. Handle Refresh Token - THE FIX IS HERE
+        User finalUser = user;
+        Instant expiresAt = Instant.now().plusSeconds(jwtService.getRefreshTtlSeconds());
 
-        //refresh
+        // Find existing token by User ID
+        Optional<RefreshToken> existingTokenOpt = refreshTokenRepository.findByUserId(finalUser.getId());
 
-        //refresh token
-        String jti = UUID.randomUUID().toString();
-        RefreshToken refreshTokenOb = RefreshToken.builder()
-                .jti(jti)
-                .user(user)
-                .revoked(false)
-                .createdAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(jwtService.getRefreshTtlSeconds()))
-                .build();
+        RefreshToken tokenToSave;
+        String jti;
 
-        refreshTokenRepository.findByUser(user)
-                .ifPresentOrElse(
-                        existing -> {
-                            existing.setJti(jti);
-                            existing.setExpiresAt(refreshTokenOb.getExpiresAt());
-                            existing.setRevoked(false);
-                            refreshTokenRepository.save(existing);
-                        },
-                        () -> refreshTokenRepository.save(refreshTokenOb)
-                );
+        if (existingTokenOpt.isPresent()) {
+            // REUSE EXISTING JTI (This fixes the "Not Recognized" error)
+            tokenToSave = existingTokenOpt.get();
+            jti = tokenToSave.getJti();
 
+            tokenToSave.setExpiresAt(expiresAt);
+            tokenToSave.setRevoked(false);
+        } else {
+            // CREATE NEW JTI
+            jti = UUID.randomUUID().toString();
+            tokenToSave = RefreshToken.builder()
+                    .jti(jti)
+                    .user(finalUser)
+                    .revoked(false)
+                    .createdAt(Instant.now())
+                    .expiresAt(expiresAt)
+                    .build();
+        }
 
+        refreshTokenRepository.save(tokenToSave);
+
+        // 4. Generate Tokens (Using the JTI we decided on above)
         String accessToken = jwtService.generateAccessToken(user);
-        String refreshToken = jwtService.generateRefreshToken(user, refreshTokenOb.getJti());
-        cookieService.attachRefreshCookie(response, refreshToken, (int) jwtService.getRefreshTtlSeconds());
-//        response.sendRedirect();
+        String refreshTokenString = jwtService.generateRefreshToken(user, jti);
 
-        response.sendRedirect(frontEndSuccessUrl);
+        // 5. Set Cookie & Redirect
+        cookieService.attachRefreshCookie(response, refreshTokenString, (int) jwtService.getRefreshTtlSeconds());
+
+        String targetUrl = UriComponentsBuilder.fromUriString(frontEndSuccessUrl)
+                .queryParam("accessToken", accessToken)
+                .build().toUriString();
+
+        response.sendRedirect(targetUrl);
     }
 }

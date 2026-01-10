@@ -1,5 +1,6 @@
 package com.auth.auth_app_backend.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -26,6 +27,7 @@ public class RefreshToken {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false, updatable = false)
+    @JsonIgnore
     private User user;
 
     @Column(nullable = false, updatable = false)

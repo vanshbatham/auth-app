@@ -21,6 +21,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -49,7 +50,7 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
         User user = null;
 
-        // 1. Fetch Default Role
+        // fetch default role
         Role defaultRole = roleRepository.findByName(AppRole.ROLE_USER.name())
                 .orElseGet(() -> {
                     Role newRole = new Role();
@@ -57,7 +58,7 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
                     return roleRepository.save(newRole);
                 });
 
-        // 2. Identify or Create User
+        // identify or create user
         switch (registrationId) {
             case "google" -> {
                 String email = oAuth2User.getAttribute("email");
@@ -65,60 +66,62 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
                 String picture = oAuth2User.getAttribute("picture");
                 String googleId = oAuth2User.getAttribute("sub");
 
-                User newUser = User.builder()
-                        .email(email)
-                        .name(name)
-                        .image(picture)
-                        .enable(true)
-                        .provider(Provider.GOOGLE)
-                        .providerId(googleId)
-                        .roles(Set.of(defaultRole))
-                        .build();
-
-                user = userRepository.findByEmail(email).orElseGet(() -> userRepository.save(newUser));
+                // find existing or create new
+                user = userRepository.findByEmail(email).orElseGet(() -> {
+                    User newUser = User.builder()
+                            .email(email)
+                            .name(name)
+                            .image(picture)
+                            .enable(true)
+                            .provider(Provider.GOOGLE)
+                            .providerId(googleId)
+                            .roles(new HashSet<>(Set.of(defaultRole))) // Ensure Mutable Set
+                            .build();
+                    return userRepository.save(newUser);
+                });
             }
             case "github" -> {
                 String email = oAuth2User.getAttribute("email");
                 String name = oAuth2User.getAttribute("name");
                 String avatar = oAuth2User.getAttribute("avatar_url");
-                String id = String.valueOf(oAuth2User.getAttributes().get("id"));
+                Object idObj = oAuth2User.getAttributes().get("id");
+                String id = String.valueOf(idObj);
 
                 if (email == null) email = name + "@github.com";
+                String finalEmail = email;
 
-                User newUser = User.builder()
-                        .email(email)
-                        .name(name)
-                        .image(avatar)
-                        .enable(true)
-                        .provider(Provider.GITHUB)
-                        .providerId(id)
-                        .roles(Set.of(defaultRole))
-                        .build();
-
-                user = userRepository.findByEmail(email).orElseGet(() -> userRepository.save(newUser));
+                user = userRepository.findByEmail(email).orElseGet(() -> {
+                    User newUser = User.builder()
+                            .email(finalEmail)
+                            .name(name)
+                            .image(avatar)
+                            .enable(true)
+                            .provider(Provider.GITHUB)
+                            .providerId(id)
+                            .roles(new HashSet<>(Set.of(defaultRole)))
+                            .build();
+                    return userRepository.save(newUser);
+                });
             }
             default -> throw new RuntimeException("Invalid registration id");
         }
 
-        // 3. Handle Refresh Token - THE FIX IS HERE
+        // handle Refresh Token
         User finalUser = user;
         Instant expiresAt = Instant.now().plusSeconds(jwtService.getRefreshTtlSeconds());
 
-        // Find existing token by User ID
+        // find existing token by User ID
         Optional<RefreshToken> existingTokenOpt = refreshTokenRepository.findByUserId(finalUser.getId());
 
         RefreshToken tokenToSave;
         String jti;
 
         if (existingTokenOpt.isPresent()) {
-            // REUSE EXISTING JTI (This fixes the "Not Recognized" error)
             tokenToSave = existingTokenOpt.get();
             jti = tokenToSave.getJti();
-
             tokenToSave.setExpiresAt(expiresAt);
             tokenToSave.setRevoked(false);
         } else {
-            // CREATE NEW JTI
             jti = UUID.randomUUID().toString();
             tokenToSave = RefreshToken.builder()
                     .jti(jti)
@@ -131,15 +134,16 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
         refreshTokenRepository.save(tokenToSave);
 
-        // 4. Generate Tokens (Using the JTI we decided on above)
+        // generate Tokens
         String accessToken = jwtService.generateAccessToken(user);
         String refreshTokenString = jwtService.generateRefreshToken(user, jti);
 
-        // 5. Set Cookie & Redirect
+        // set cookie & redirect
         cookieService.attachRefreshCookie(response, refreshTokenString, (int) jwtService.getRefreshTtlSeconds());
 
         String targetUrl = UriComponentsBuilder.fromUriString(frontEndSuccessUrl)
                 .queryParam("accessToken", accessToken)
+                .queryParam("refreshToken", refreshTokenString)
                 .build().toUriString();
 
         response.sendRedirect(targetUrl);

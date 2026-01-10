@@ -4,11 +4,14 @@ import com.auth.auth_app_backend.dtos.UserDTO;
 import com.auth.auth_app_backend.entities.Provider;
 import com.auth.auth_app_backend.entities.User;
 import com.auth.auth_app_backend.exceptions.ResourceNotFoundException;
+import com.auth.auth_app_backend.repositories.RefreshTokenRepository;
 import com.auth.auth_app_backend.repositories.UserRepository;
 import com.auth.auth_app_backend.services.UserService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -18,6 +21,7 @@ import java.time.Instant;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
+    private final RefreshTokenRepository refreshTokenRepository; // 3. Inject Token Repo
     private final ModelMapper modelMapper;
 
     @Override
@@ -59,7 +63,6 @@ public class UserServiceImpl implements UserService {
         User existingUser = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id : " + userId));
 
-        // We are not going to change email id for this project.
         existingUser.setName(userDTO.getName());
         existingUser.setImage(userDTO.getImage());
         existingUser.setProvider(userDTO.getProvider());
@@ -72,11 +75,22 @@ public class UserServiceImpl implements UserService {
 
         return modelMapper.map(updatedUser, UserDTO.class);
     }
-
+    
     @Override
+    @Transactional
     public void deleteUser(Long userId) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String currentEmail = authentication.getName();
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id : " + userId));
+
+        if (user.getEmail().equals(currentEmail)) {
+            throw new RuntimeException("Operation denied: You cannot delete your own account.");
+        }
+
+        refreshTokenRepository.deleteByUser(user);
+
         userRepository.delete(user);
     }
 
